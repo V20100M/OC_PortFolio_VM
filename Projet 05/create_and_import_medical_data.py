@@ -6,7 +6,9 @@ import os
 import time
 
 
-# 🧪 test d’intégrité
+# -----------------------------
+# 🧪 TEST D’INTÉGRITÉ
+# -----------------------------
 print("🔍 Exécution du test d’intégrité des données...")
 result = subprocess.run(["python", "test_integrity.py"], capture_output=True, text=True)
 print(result.stdout)
@@ -22,26 +24,12 @@ print("✅ Test d’intégrité terminé — démarrage de la migration.\n")
 MONGO_URI = os.getenv("MONGO_URI", f"mongodb://{os.getenv('MONGO_INITDB_ROOT_USERNAME')}:{os.getenv('MONGO_INITDB_ROOT_PASSWORD')}@{os.getenv('MONGO_HOST', 'localhost')}:27017/?authSource={os.getenv('MONGO_INITDB_DATABASE', 'admin')}")
 DB_NAME = "medical_data"
 COLLECTION_NAME = "admissions"
-CSV_FILE = "medical_data.csv"  # <-- Mets ici le chemin vers ton fichier CSV
+CSV_FILE = "medical_data.csv"
 
 
 # -----------------------------
 # 🚀 CONNEXION À MONGODB
 # -----------------------------
-max_retries = 10
-for attempt in range(max_retries):
-    try:
-        client = MongoClient(MONGO_URI, serverSelectionTimeoutMS=5000)
-        client.admin.command('ping')
-        print("✅ Connexion MongoDB réussie.")
-        break
-    except Exception as e:
-        print(f"⏳ Tentative {attempt+1}/{max_retries} : MongoDB pas encore prêt ({e})")
-        time.sleep(5)
-else:
-    print("❌ MongoDB inaccessible après plusieurs tentatives. Arrêt du script.")
-    exit(1)
-
 client = MongoClient(MONGO_URI)
 db = client[DB_NAME]
 
@@ -50,77 +38,9 @@ if COLLECTION_NAME in db.list_collection_names():
     db[COLLECTION_NAME].drop()
     print(f"🧹 Collection '{COLLECTION_NAME}' supprimée.")
 
-# -----------------------------
-# 🧱 CRÉATION DE LA COLLECTION AVEC VALIDATION JSON SCHEMA
-# -----------------------------
-schema = {
-    "$jsonSchema": {
-        "bsonType": "object",
-        "required": ["patient", "admission", "medical"],
-        "properties": {
-            "patient": {
-                "bsonType": "object",
-                "required": ["name", "age", "gender", "blood_type", "insurance_provider"],
-                "properties": {
-                    "name": {"bsonType": "string"},
-                    "age": {"bsonType": "int"},
-                    "gender": {"enum": ["Male", "Female"]},
-                    "blood_type": {
-                        "enum": ["A+", "A-", "B+", "B-", "AB+", "AB-", "O+", "O-"]
-                    },
-                    "insurance_provider": {
-                        "enum": ["Aetna", "Blue Cross", "Cigna", "Medicare", "UnitedHealthcare"]
-                    },
-                },
-            },
-            "admission": {
-                "bsonType": "object",
-                "required": ["date", "type"],
-                "properties": {
-                    "date": {"bsonType": "date"},
-                    "type": {"enum": ["Elective", "Emergency", "Urgent"]},
-                    "room_number": {"bsonType": ["int", "null"]},
-                    "billing_amount": {"bsonType": ["double", "null"]},
-                    "discharge_date": {"bsonType": ["date", "null"]},
-                    "doctor": {"bsonType": "string"},
-                    "hospital": {"bsonType": "string"},
-                },
-            },
-            "medical": {
-                "bsonType": "object",
-                "required": ["condition", "medication", "test_results"],
-                "properties": {
-                    "condition": {
-                        "enum": [
-                            "Arthritis",
-                            "Asthma",
-                            "Cancer",
-                            "Diabetes",
-                            "Hypertension",
-                            "Obesity",
-                        ]
-                    },
-                    "medication": {
-                        "enum": [
-                            "Aspirin",
-                            "Ibuprofen",
-                            "Lipitor",
-                            "Paracetamol",
-                            "Penicillin",
-                        ]
-                    },
-                    "test_results": {
-                        "enum": ["Abnormal", "Inconclusive", "Normal"]
-                    },
-                },
-            },
-        },
-    }
-}
-
-db.create_collection(COLLECTION_NAME, validator=schema)
+# Récupération de la collection créée via 02-create-collections.js
 collection = db[COLLECTION_NAME]
-print(f"✅ Collection '{COLLECTION_NAME}' créée avec schéma de validation.")
+print(f"✅ Collection '{COLLECTION_NAME}' prête (schéma déjà défini dans l’initialisation MongoDB).")
 
 # -----------------------------
 # 🧱 CRÉATION D’UN INDEX UNIQUE

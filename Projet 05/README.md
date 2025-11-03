@@ -13,17 +13,23 @@ L’environnement complet (base de données + script Python d’import) est cont
 
 ## 💡 Fonctionnement global de la migration
 
-Lors du démarrage du projet :
-- Le conteneur MongoDB est créé et initialisé avec des rôles et utilisateurs définis dans le script data/init/01-medical-roles-users.js.
-- Une fois la base prête, le conteneur medical_data_migration exécute automatiquement le script create_and_import_medical_data.py, qui :
-  1) vérifie la cohérence du fichier CSV via test_integrity.py,
-  2) attend que MongoDB soit totalement opérationnel,
-  3) crée la collection admissions avec un schéma JSON de validation,
-  4) applique un index unique sur les patients,
-  5) nettoie et insère les données,
-  6) ignore les doublons et affiche un rapport final.
+Lors du lancement du Docker-Compose :
 
-Ce pipeline garantit une migration fiable, traçable et automatisée.
+### 1️⃣ Le conteneur MongoDB démarre à partir de l'image officielle mongo 8.0
+- lit dles variables d'environnement du fichier .env (nom de la base, mot de passe, etc.) 
+- initiase la base medical_data si data/db est vide
+- exécute automatiquement les scripts présents dans data/init :
+  - 01-medical-roles-users.js création des rôles et des utilisateurs
+  - 02-create-collections.js création de la collection admissions avec schema JSON
+- attend d'être prêt (healthcheck) avant de laisser l'autre conteneur démarrer.
+
+### 2️⃣ le conteneur medical_data_migration (Python) démarre seulement une fois MongoDB "healthy"
+Il :
+- vérifie la cohérence du fichier CSV via test_integrity.py,  
+- attend la disponibilité de MongoDB (script sh),  
+- lit le fichier .env pour se connecter à la base,  
+- nettoie et insère les données dans admissions,  
+- gère les doublons et affiche un rapport final.  
 
 ## 🧱 Architecture du projet
 
@@ -32,15 +38,17 @@ Ce pipeline garantit une migration fiable, traçable et automatisée.
 ├── Dockerfile
 ├── docker-compose.yml
 ├── requirements.txt
+├── wait-for-mongo.sh                     # Vérifie la disponibilité de Mongo avant import
 ├── create_and_import_medical_data.py     # Script principal de migration
 ├── test_integrity.py                     # Vérification des données CSV
 ├── medical_data.csv                      # Jeu de données source
 ├── .env                                  # Variables d'environnement
 ├── .dockerignore                         # Exclusion de fichiers inutiles lors du build
 └── data/
-    ├── db/                               # Volume persistant pour les données MongoDB (créé par MongoDB)
-    └── init/
-        └── 01-medical-roles-users.js     # Script JS d’initialisation des rôles/utilisateurs
+    ├── db/                               # Volume persistant MongoDB (créé au démarrage)
+    └── init/                             # Scripts exécutés automatiquement à la première exéction
+        └── 01-medical-roles-users.js     # Création des rôles et utilisateurs
+        └── 02-create-collections.js      # Création de la collection et du schéma JSON
 ```
 
 
@@ -57,14 +65,18 @@ PyMongo pour les interactions avec MongoDB
 
 ## 🔐 Initialisation de MongoDB
 
-Lors du **premier démarrage**, MongoDB exécute automatiquement le script :
-data/init/01-medical-roles-users.js
+Lors du **premier démarrage**, MongoDB exécute automatiquement les scripts :
+01-medical-roles-users.js
 
 Ce script crée sur la base `medical_data` :
 - les rôles applicatifs (`medical_admin`, `medical_user`, etc.),
 - et les utilisateurs associés (`admin_medical`, `user_medical`, etc.).
 
-> ⚠️ Le script n’est exécuté **que si le répertoire `data/db` est vide**, c'est-à-dire, à la première exécution.  
+02-create-collections.js
+
+Crée la collection admissions avec son schéma JSON (validation structurelle et contrainte de types)
+
+> ⚠️ Les scripts ne sont exécutés **que si le répertoire `data/db` est vide**, c'est-à-dire, à la première exécution.  
 > Pour relancer une initialisation complète : supprimez `./data/db/` avant de relancer Docker.
 ---
 
@@ -132,12 +144,20 @@ Colonnes présentes : 15
 ---------------------------------------- 
 🏁 Test d’intégrité terminé.
 ✅ Test d’intégrité terminé — démarrage de la migration.
+
+✅ Connexion MongoDB réussie.
+✅ Collection 'admissions' créée avec schéma de validation.
+🔒 Index unique créé sur (patient.name, admission.date)
+✅ 54966 documents insérés avec succès.
+⚠️ 534 doublons détectés et ignorés.
+📈 Nombre total de documents dans la collection : 54966
+🎉 Import terminé avec vérification des doublons !
 ```
 
 ## 🧭 Connexion à MongoDB depuis l’hôte
 Depuis le terminal
 ```
-mongosh "mongodb://root_admin:Root@123@localhost:27017/admin?authSource=admin"
+mongosh "mongodb://admin_medical:Admin%40123@localhost:27017/medical_data?authSource=medical_data"
 ```
 
 Depuis MongoDB Compass, dans URI :

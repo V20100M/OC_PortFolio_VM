@@ -11,7 +11,7 @@ services:
       - ./data/db:/data/db
       - ./data/init:/docker-entrypoint-initdb.d
     healthcheck:
-      test: ["CMD", "mongosh", "--quiet", "--eval", "db.runCommand({ ping: 1 }).ok"]
+      test: ["CMD-SHELL", "mongosh --quiet --eval \"db.runCommand({ ping: 1 }).ok\" || exit 1"]
       interval: 10s
       timeout: 5s
       retries: 20
@@ -28,7 +28,7 @@ services:
       MONGO_URI: mongodb://${APP_DB_USER}:${APP_DB_PASS_ENCODED}@mongodb_medical:27017/${MONGO_INITDB_DATABASE}?authSource=${MONGO_INITDB_DATABASE}
     volumes:
       - .:/app
-    command: ["python", "create_and_import_medical_data.py"]
+    command: ["bash", "/app/wait-for-mongo.sh", "mongodb_medical", "27017", "python", "create_and_import_medical_data.py"]
 
 volumes:
   mongo_data:
