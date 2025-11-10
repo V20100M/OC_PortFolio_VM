@@ -61,7 +61,7 @@ print("🔒 Index unique créé sur (patient.name, admission.date)")
 # -----------------------------
 # 📂 LECTURE DU CSV
 # -----------------------------
-df = pd.read_csv(CSV_FILE)
+df = pd.read_csv(CSV_FILE, sep=None, engine="python")
 
 # Nettoyage et normalisation des colonnes
 df.columns = (
@@ -87,6 +87,20 @@ df = df.where(pd.notnull(df), None)
 # -----------------------------
 documents = []
 for _, row in df.iterrows():
+
+    # Sécurise la conversion date_of_admission
+    admission_date = (
+        row["date_of_admission"].to_pydatetime()
+        if pd.notna(row["date_of_admission"])
+        else None
+    )
+
+    discharge_date = (
+        row["discharge_date"].to_pydatetime()
+        if pd.notna(row["discharge_date"])
+        else None
+    )
+
     doc = {
         "patient": {
             "name": row["name"],
@@ -96,11 +110,11 @@ for _, row in df.iterrows():
             "insurance_provider": row["insurance_provider"],
         },
         "admission": {
-            "date": row["date_of_admission"].to_pydatetime() if row["date_of_admission"] else None,
+            "date": admission_date,
             "type": row["admission_type"],
-            "room_number": int(row["room_number"]) if row["room_number"] else None,
-            "billing_amount": float(row["billing_amount"]) if row["billing_amount"] else None,
-            "discharge_date": row["discharge_date"].to_pydatetime() if row["discharge_date"] else None,
+            "room_number": int(row["room_number"]) if row["room_number"] is not None else None,
+            "billing_amount": float(row["billing_amount"]) if row["billing_amount"] is not None else None,
+            "discharge_date": discharge_date,
             "doctor": row["doctor"],
             "hospital": row["hospital"],
         },

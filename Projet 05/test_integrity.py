@@ -49,7 +49,7 @@ duplicate_subset = [
 # 📂 LECTURE DU CSV
 # -----------------------------
 try:
-    df = pd.read_csv(CSV_FILE)
+    df = pd.read_csv(CSV_FILE, sep=None, engine="python")
     print(f"✅ Fichier '{CSV_FILE}' chargé avec succès.")
 except FileNotFoundError:
     print(f"❌ ERREUR : le fichier '{CSV_FILE}' est introuvable.")
@@ -83,15 +83,55 @@ if not pd.api.types.is_numeric_dtype(df["Age"]):
 if not pd.api.types.is_numeric_dtype(df["Billing Amount"]):
     type_errors.append("Billing Amount non numérique")
 
-try:
-    pd.to_datetime(df["Date of Admission"], errors="raise")
-except Exception:
-    type_errors.append("Date of Admission invalide")
-
 if type_errors:
     print(f"⚠️ Erreurs de typage détectées : {type_errors}")
 else:
     print("✅ Les types de colonnes principales sont corrects.")
+
+# -----------------------------
+# 🗓️ CONTRÔLE AVANCÉ DES DATES
+# -----------------------------
+date_errors = []
+
+# Conversion sécurisée
+df["Date of Admission"] = pd.to_datetime(df["Date of Admission"], errors="coerce", dayfirst=True)
+df["Discharge Date"] = pd.to_datetime(df["Discharge Date"], errors="coerce", dayfirst=True)
+
+# 1️⃣ Dates invalides (NaT)
+invalid_admission = df[df["Date of Admission"].isna()]
+invalid_discharge = df[df["Discharge Date"].isna()]
+
+if len(invalid_admission) > 0:
+    print(f"⚠️ {len(invalid_admission)} dates d’admission invalides (NaT ou format incorrect)")
+    print(invalid_admission[["Name", "Date of Admission"]].head())
+
+if len(invalid_discharge) > 0:
+    print(f"⚠️ {len(invalid_discharge)} dates de sortie invalides (NaT ou format incorrect)")
+    print(invalid_discharge[["Name", "Discharge Date"]].head())
+
+# 2️⃣ Dates dans le futur (incohérence)
+future_dates = df[df["Date of Admission"] > pd.Timestamp.now()]
+
+if len(future_dates) > 0:
+    print(f"⚠️ {len(future_dates)} dates d’admission dans le futur détectées")
+    print(future_dates[["Name", "Date of Admission"]].head())
+
+# 3️⃣ Discharge Date < Admission Date
+invalid_chronology = df[
+    (df["Date of Admission"].notna()) &
+    (df["Discharge Date"].notna()) &
+    (df["Discharge Date"] < df["Date of Admission"])
+]
+
+if len(invalid_chronology) > 0:
+    print(f"⚠️ {len(invalid_chronology)} incohérences chronologiques détectées (sortie avant admission)")
+    print(invalid_chronology[["Name", "Date of Admission", "Discharge Date"]].head())
+
+# Si au moins une erreur a été détectée
+if len(invalid_admission) > 0 or len(invalid_discharge) > 0 or len(future_dates) > 0 or len(invalid_chronology) > 0:
+    print("⚠️ Erreurs de dates détectées")
+else:
+    print("✅ Toutes les dates sont valides")
 
 # -----------------------------
 # 🚨 VALEURS MANQUANTES
