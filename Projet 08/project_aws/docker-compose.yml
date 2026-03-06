@@ -1,0 +1,66 @@
+services:
+  mongo1:
+    image: mongo:7
+    container_name: weather_mongo1
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    ports:
+      - "27017:27017"
+    volumes:
+      - weather_mongo1_data:/data/db
+
+  mongo2:
+    image: mongo:7
+    container_name: weather_mongo2
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - weather_mongo2_data:/data/db
+
+  mongo3:
+    image: mongo:7
+    container_name: weather_mongo3
+    command: ["mongod", "--replSet", "rs0", "--bind_ip_all"]
+    volumes:
+      - weather_mongo3_data:/data/db
+
+  mongo-init:
+    image: mongo:7
+    container_name: weather_mongo_init
+    depends_on:
+      - mongo1
+      - mongo2
+      - mongo3
+    command: >
+      bash -c "
+        sleep 5 &&
+        mongosh --host mongo1:27017 --eval '
+          try {
+            rs.status();
+          } catch (e) {
+            rs.initiate({
+              _id: \"rs0\",
+              members: [
+                { _id: 0, host: \"mongo1:27017\", priority: 2 },
+                { _id: 1, host: \"mongo2:27017\", priority: 1 },
+                { _id: 2, host: \"mongo3:27017\", priority: 1 }
+              ]
+            })
+          }'
+      "
+
+  app:
+    build: .
+    container_name: weather_app
+    depends_on:
+      - mongo1
+      - mongo2
+      - mongo3
+    env_file:
+      - .env
+    volumes:
+      - ~/.aws:/root/.aws:ro
+    command: ["python", "main.py"]
+
+volumes:
+  weather_mongo1_data:
+  weather_mongo2_data:
+  weather_mongo3_data:
