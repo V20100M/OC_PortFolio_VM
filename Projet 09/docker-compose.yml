@@ -1,0 +1,105 @@
+services:
+
+  # ── Redpanda (broker Kafka-compatible) ────────────────────────────────────────
+  redpanda:
+    image: redpandadata/redpanda:v26.1.1
+    container_name: redpanda
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --pandaproxy-addr internal://0.0.0.0:8082,external://0.0.0.0:18082
+      - --advertise-pandaproxy-addr internal://redpanda:8082,external://localhost:18082
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level warn
+    ports:
+      - "19092:19092"   # Kafka API (externe)
+      - "18082:18082"   # Pandaproxy
+      - "18081:18081"   # Schema Registry
+      - "9644:9644"     # Admin API
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    healthcheck:
+      test: ["CMD", "rpk", "cluster", "info"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  # ── Redpanda Console (UI web) ─────────────────────────────────────────────────
+  redpanda-console:
+    image: redpandadata/console:latest
+    container_name: redpanda-console
+    ports:
+      - "8080:8080"
+    environment:
+      - KAFKA_BROKERS=redpanda:9092
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  # ── Initialisation du topic ───────────────────────────────────────────────────
+  redpanda-init:
+    image: redpandadata/redpanda:v26.1.1
+    container_name: redpanda-init
+    depends_on:
+      redpanda:
+        condition: service_healthy
+    entrypoint: ["/bin/bash", "-c"]
+    command:
+      - |
+        rpk topic create client_tickets \
+          --brokers redpanda:9092 \
+          --partitions 3 \
+          --replicas 1 || true
+        echo "✅ Topic client_tickets prêt"
+
+  # ── Producteur de tickets ─────────────────────────────────────────────────────
+  producer:
+    build:
+      context: ./producer
+    container_name: producer
+    environment:
+      - BOOTSTRAP_SERVERS=redpanda:9092
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  # ── Consumer PySpark ──────────────────────────────────────────────────────────
+  consumer:
+    build:
+      context: ./consumer
+    container_name: consumer
+    environment:
+      - BOOTSTRAP_SERVERS=redpanda:9092
+    volumes:
+      - output_data:/app/output
+      - checkpoint_data:/app/checkpoint
+    depends_on:
+      redpanda-init:
+        condition: service_completed_successfully
+    restart: on-failure
+
+  # ── Exporter PySpark ──────────────────────────────────────────────────────────
+  exporter:
+    build:
+      context: ./exporter
+    container_name: exporter
+    environment:
+      - BOOTSTRAP_SERVERS=redpanda:9092
+    volumes:
+      - output_data:/app/output
+    depends_on:
+      - consumer
+    restart: on-failure
+
+# ── Volumes persistants ───────────────────────────────────────────────────────
+volumes:
+  redpanda_data:
+  output_data:
+  checkpoint_data:
