@@ -1,0 +1,547 @@
+id: bottleNeck_pipeline_duckdb
+namespace: bottleneck
+description: Pipeline BottleNeck
+
+
+# ===============================================================================
+# TRIGGER PERMETTANT DE LANCER LE PIPELINE A 9h LE 15 DE CHAQUE MOIS
+# ===============================================================================
+triggers:
+  - id: monthly_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 9 15 * *"
+
+
+tasks:
+
+  # ===============================================================================
+  # CHARGEMENT DES FICHIERS ET NETTOYAGE
+  # ===============================================================================
+  - id: parallele_lire
+    type: io.kestra.plugin.core.flow.Parallel
+    tasks:
+
+      # PARTIE ERP
+      - id: lire_erp
+        type: io.kestra.plugin.scripts.python.Script
+        outputFiles:
+          - erp_clean.csv
+          - erp_clean_partiel.csv
+        beforeCommands:
+          - pip install pandas openpyxl duckdb -q
+        retry:
+          type: constant
+          interval: PT10S
+          maxAttempt: 5
+        script: |
+          import warnings
+          warnings.filterwarnings("ignore")
+          import duckdb, pandas as pd, sys
+
+          IS_PARTIEL = False
+
+          # Fichiers de sortie initialisés vides
+          open('erp_clean_partiel.csv', 'w').write("product_id,onsale_web,price,stock_quantity,stock_status\n")
+          open('erp_clean.csv', 'w').write("product_id,onsale_web,price,stock_quantity,stock_status\n")
+
+          # TEST CHARGEMENT ERP
+          try:
+            df = pd.read_excel("{{ fileURI('Fichier_erp.xlsx') }}")
+            if df.empty:
+              raise ValueError("Fichier ERP vide")
+            print(f"Chargement ERP OK - {len(df)} lignes brutes")
+          except Exception as e:
+            print(f"Echec chargement ERP : {e}")
+            sys.exit(1)
+
+          df.to_csv('/tmp/erp_raw.csv', index=False)
+
+          con = duckdb.connect()
+          con.execute("CREATE TABLE erp AS SELECT * FROM read_csv('/tmp/erp_raw.csv')")
+
+          # Dédoublonnage
+          con.execute("""
+            CREATE TABLE erp_dedup AS
+            SELECT DISTINCT ON (product_id) *
+            FROM erp
+          """)
+          result_dedup = con.execute("SELECT COUNT(*) FROM erp_dedup").fetchone()[0]
+          print(f"ERP après dédoublonnage : {result_dedup} lignes")
+
+          # Nettoyage
+          con.execute("""
+            CREATE TABLE erp_clean AS
+            SELECT *
+            FROM erp_dedup
+            WHERE product_id IS NOT NULL
+          """)
+          result_clean = con.execute("SELECT COUNT(*) FROM erp_clean").fetchone()[0]
+          print(f"ERP après nettoyage : {result_clean} lignes")
+
+          # TEST NETTOYAGE ERP
+          errors = []
+
+          nb_doublons = con.execute("SELECT COUNT(*) FROM (SELECT product_id, COUNT(*) c FROM erp_clean GROUP BY product_id HAVING c > 1)").fetchone()[0]
+          if nb_doublons > 0:
+            msg = f"{nb_doublons} doublons détectés sur product_id"
+            errors.append(msg)
+
+          nb_null = con.execute("SELECT COUNT(*) FROM erp_clean WHERE product_id IS NULL").fetchone()[0]
+          if nb_null > 0:
+            msg = f"{nb_null} valeurs manquantes sur product_id"
+            errors.append(msg)
+
+          if result_clean != 825:
+            msg = f"{result_clean} lignes trouvées, 825 attendues"
+            errors.append(msg)
+
+          if errors:
+            print("Erreurs lors des Tests ERP :")
+            for e in errors:
+              print(f" - {e}")
+            IS_PARTIEL = True
+
+          con.execute("COPY erp_clean TO 'erp_clean.csv' (HEADER, DELIMITER ',')")
+          if IS_PARTIEL:
+            con.execute("COPY erp_clean TO 'erp_clean_partiel.csv' (HEADER, DELIMITER ',')")
+            print("Fichier erp_clean_partiel.csv généré")
+          else:
+            open('erp_clean_partiel.csv', 'w').write("product_id,onsale_web,price,stock_quantity,stock_status\n")
+            print("TEST ERP OK")
+
+
+      # PARTIE LIAISON
+      - id: lire_liaison
+        type: io.kestra.plugin.scripts.python.Script
+        outputFiles:
+          - liaison_clean.csv
+          - liaison_clean_partiel.csv
+        beforeCommands:
+          - pip install pandas openpyxl duckdb -q
+        retry:
+          type: constant
+          interval: PT10S
+          maxAttempt: 5
+        script: |
+          import warnings
+          warnings.filterwarnings("ignore")
+          import duckdb, pandas as pd, sys
+
+          IS_PARTIEL = False
+
+          # Fichiers de sortie initialisés vides
+          open('liaison_clean_partiel.csv', 'w').write("product_id,id_web\n")
+          open('liaison_clean.csv', 'w').write("product_id,id_web\n")
+
+          # TEST CHARGEMENT LIAISON
+          try:
+            df = pd.read_excel("{{ fileURI('fichier_liaison.xlsx') }}")
+            if df.empty:
+              raise ValueError("Fichier liaison vide")
+            print(f"Chargement liaison OK - {len(df)} lignes brutes")
+          except Exception as e:
+            print(f"Echec chargement LIAISON : {e}")
+            sys.exit(1)
+
+          df.to_csv('/tmp/liaison_raw.csv', index=False)
+
+          con = duckdb.connect()
+          con.execute("CREATE TABLE liaison AS SELECT * FROM read_csv('/tmp/liaison_raw.csv')")
+
+          # Dédoublonnage
+          con.execute("""
+            CREATE TABLE liaison_dedup AS
+            SELECT DISTINCT ON (product_id) *
+            FROM liaison
+          """)
+          result_dedup = con.execute("SELECT COUNT(*) FROM liaison_dedup").fetchone()[0]
+          print(f"Liaison après dédoublonnage : {result_dedup} lignes")
+
+          # Nettoyage
+          con.execute("""
+            CREATE TABLE liaison_clean AS
+            SELECT *
+            FROM liaison_dedup
+            WHERE product_id IS NOT NULL
+            AND id_web IS NOT NULL
+          """)
+          result_clean = con.execute("SELECT COUNT(*) FROM liaison_clean").fetchone()[0]
+          print(f"Liaison après nettoyage : {result_clean} lignes")
+
+          # TEST NETTOYAGE LIAISON
+          errors = []
+
+          nb_doublons = con.execute("SELECT COUNT(*) FROM (SELECT product_id, id_web, COUNT(*) c FROM liaison_clean GROUP BY product_id, id_web HAVING c > 1)").fetchone()[0]
+          if nb_doublons > 0:
+            msg = f"{nb_doublons} doublons sur la paire product_id/id_web"
+            errors.append(msg)
+
+          nb_null_pid = con.execute("SELECT COUNT(*) FROM liaison_clean WHERE product_id IS NULL").fetchone()[0]
+          if nb_null_pid > 0:
+            msg = f"{nb_null_pid} valeurs manquantes sur product_id"
+            errors.append(msg)
+
+          nb_null_web = con.execute("SELECT COUNT(*) FROM liaison_clean WHERE id_web IS NULL").fetchone()[0]
+          if nb_null_web > 0:
+            msg = f"{nb_null_web} valeurs manquantes sur id_web"
+            errors.append(msg)
+
+          if result_clean > 825 or result_clean < 700:
+            msg = f"{result_clean} lignes trouvées, entre 700 et 825 attendues"
+            errors.append(msg)
+
+          if errors:
+            print("Erreurs lors des Tests LIAISON :")
+            for e in errors:
+              print(f" - {e}")
+            IS_PARTIEL = True
+
+          con.execute("COPY liaison_clean TO 'liaison_clean.csv' (HEADER, DELIMITER ',')")
+          if IS_PARTIEL:
+            con.execute("COPY liaison_clean TO 'liaison_clean_partiel.csv' (HEADER, DELIMITER ',')")
+            print("Fichier liaison_clean_partiel.csv généré")
+          else:
+            open('liaison_clean_partiel.csv', 'w').write("product_id,id_web\n")
+            print("TEST LIAISON OK")
+
+
+      # PARTIE WEB
+      - id: lire_web
+        type: io.kestra.plugin.scripts.python.Script
+        outputFiles:
+          - web_clean.csv
+          - web_clean_partiel.csv
+        beforeCommands:
+          - pip install pandas openpyxl duckdb -q
+        retry:
+          type: constant
+          interval: PT10S
+          maxAttempt: 5
+        script: |
+          import warnings
+          warnings.filterwarnings("ignore")
+          import duckdb, pandas as pd, sys
+
+          IS_PARTIEL = False
+
+          # Fichiers de sortie initialisés vides
+          open('web_clean_partiel.csv', 'w').write("sku,total_sales,post_title,post_name\n")
+          open('web_clean.csv', 'w').write("sku,total_sales,post_title,post_name\n")
+
+          # TEST CHARGEMENT WEB
+          try:
+            df = pd.read_excel("{{ fileURI('Fichier_web.xlsx') }}")
+            if df.empty:
+              raise ValueError("Fichier web vide")
+            print(f"Chargement CMS OK - {len(df)} lignes brutes")
+          except Exception as e:
+            print(f"Echec chargement CMS : {e}")
+            sys.exit(1)
+
+          df['post_title'] = df['post_title'].str.replace('&amp;', '&', regex=False)
+          df.to_csv('/tmp/web_raw.csv', index=False)
+
+          con = duckdb.connect()
+          con.execute("CREATE TABLE web AS SELECT * FROM read_csv('/tmp/web_raw.csv')")
+
+          # Nettoyage
+          con.execute("""
+            CREATE TABLE web_no_null AS
+            SELECT *
+            FROM web
+            WHERE sku IS NOT NULL
+            AND post_type = 'product'
+          """)
+          result_no_null = con.execute("SELECT COUNT(*) FROM web_no_null").fetchone()[0]
+          print(f"CMS après nettoyage : {result_no_null} lignes")
+
+          # Dédoublonnage
+          con.execute("""
+            CREATE TABLE web_clean AS
+            SELECT DISTINCT ON (sku) *
+            FROM web_no_null
+          """)
+          result_clean = con.execute("SELECT COUNT(*) FROM web_clean").fetchone()[0]
+          print(f"CMS après dédoublonnage : {result_clean} lignes")
+
+          # TEST NETTOYAGE WEB
+          errors = []
+
+          nb_doublons = con.execute("SELECT COUNT(*) FROM (SELECT sku, COUNT(*) c FROM web_clean GROUP BY sku HAVING c > 1)").fetchone()[0]
+          if nb_doublons > 0:
+            msg = f"{nb_doublons} doublons détectés sur sku"
+            errors.append(msg)
+
+          nb_null = con.execute("SELECT COUNT(*) FROM web_clean WHERE sku IS NULL").fetchone()[0]
+          if nb_null > 0:
+            msg = f"{nb_null} valeurs manquantes sur sku"
+            errors.append(msg)
+
+          if result_clean != 714:
+            msg = f"{result_clean} lignes trouvées, 714 attendues"
+            errors.append(msg)
+
+          if errors:
+            print("Erreurs lors des Tests WEB :")
+            for e in errors:
+              print(f" - {e}")
+            IS_PARTIEL = True
+
+          con.execute("COPY web_clean TO 'web_clean.csv' (HEADER, DELIMITER ',')")
+          if IS_PARTIEL:
+            con.execute("COPY web_clean TO 'web_clean_partiel.csv' (HEADER, DELIMITER ',')")
+            print("Fichier web_clean_partiel.csv généré")
+          else:
+            open('web_clean_partiel.csv', 'w').write("sku,total_sales,post_title,post_name\n")
+            print("Test WEB OK")
+
+
+  # ===============================================================================
+  # JOINTURE DES FICHIERS
+  # ===============================================================================
+  - id: fusion_files
+    type: io.kestra.plugin.scripts.python.Script
+    inputFiles:
+      erp_clean.csv: "{{ outputs.lire_erp.outputFiles['erp_clean.csv'] }}"
+      liaison_clean.csv: "{{ outputs.lire_liaison.outputFiles['liaison_clean.csv'] }}"
+      web_clean.csv: "{{ outputs.lire_web.outputFiles['web_clean.csv'] }}"
+      erp_clean_partiel.csv: "{{ outputs.lire_erp.outputFiles['erp_clean_partiel.csv'] }}"
+      liaison_clean_partiel.csv: "{{ outputs.lire_liaison.outputFiles['liaison_clean_partiel.csv'] }}"
+      web_clean_partiel.csv: "{{ outputs.lire_web.outputFiles['web_clean_partiel.csv'] }}"
+    outputFiles:
+      - fusion.csv
+      - fusion_partiel.csv
+    beforeCommands:
+      - pip install pandas openpyxl duckdb -q
+    script: |
+      import duckdb, pandas as pd
+
+      def est_partiel(filepath):
+        try:
+          return pd.read_csv(filepath).shape[0] > 0
+        except:
+          return False
+
+      IS_PARTIEL = (
+        est_partiel('erp_clean_partiel.csv') or
+        est_partiel('liaison_clean_partiel.csv') or
+        est_partiel('web_clean_partiel.csv')
+      )
+
+      if IS_PARTIEL:
+        print("Attention - Au moins un fichier source est partiel")
+
+      con = duckdb.connect()
+      con.execute("CREATE TABLE erp AS SELECT * FROM read_csv('erp_clean.csv')")
+      con.execute("CREATE TABLE liaison AS SELECT * FROM read_csv('liaison_clean.csv')")
+      con.execute("CREATE TABLE web AS SELECT * FROM read_csv('web_clean.csv')")
+
+      con.execute("""
+        CREATE TABLE fusion_files AS
+        SELECT e.product_id, e.onsale_web, e.price, e.stock_quantity, e.stock_status,
+               w.sku, w.total_sales, w.post_title, w.post_name
+        FROM erp e
+        INNER JOIN liaison l ON e.product_id = l.product_id
+        INNER JOIN web w ON l.id_web = w.sku
+      """)
+      result_fusion = con.execute("SELECT COUNT(*) FROM fusion_files").fetchone()[0]
+      print(f"Fichier fusionné : {result_fusion} lignes")
+
+      # TEST JOINTURE
+      errors = []
+
+      if result_fusion != 714:
+        msg = f"{result_fusion} lignes trouvées, 714 attendues"
+        errors.append(msg)
+
+      nb_null_price = con.execute("SELECT COUNT(*) FROM fusion_files WHERE price IS NULL").fetchone()[0]
+      if nb_null_price > 0:
+        msg = f"{nb_null_price} valeurs manquantes sur price"
+        errors.append(msg)
+
+      nb_null_sales = con.execute("SELECT COUNT(*) FROM fusion_files WHERE total_sales IS NULL").fetchone()[0]
+      if nb_null_sales > 0:
+        msg = f"{nb_null_sales} valeurs manquantes sur total_sales"
+        errors.append(msg)
+
+      nb_doublons = con.execute("SELECT COUNT(*) FROM (SELECT product_id, COUNT(*) c FROM fusion_files GROUP BY product_id HAVING c > 1)").fetchone()[0]
+      if nb_doublons > 0:
+        msg = f"{nb_doublons} doublons sur product_id"
+        errors.append(msg)
+
+      if errors:
+        print("Erreurs lors des Tests de Jointure :")
+        for e in errors:
+          print(f" - {e}")
+        IS_PARTIEL = True
+
+      con.execute("COPY fusion_files TO 'fusion.csv' (HEADER, DELIMITER ',')")
+      if IS_PARTIEL:
+        con.execute("COPY fusion_files TO 'fusion_partiel.csv' (HEADER, DELIMITER ',')")
+        print("Fichier fusion_partiel.csv généré")
+      else:
+        open('fusion_partiel.csv', 'w').write("product_id,price,stock_quantity,stock_status,sku,total_sales,post_title,post_name\n")
+        print("Test JOINTURE OK")
+
+
+  # ===============================================================================
+  # CALCUL DU CA
+  # ===============================================================================
+  - id: calcul_ca
+    type: io.kestra.plugin.scripts.python.Script
+    beforeCommands:
+      - pip install pandas openpyxl duckdb -q
+    inputFiles:
+      fusion.csv: "{{ outputs.fusion_files.outputFiles['fusion.csv'] }}"
+      fusion_partiel.csv: "{{ outputs.fusion_files.outputFiles['fusion_partiel.csv'] }}"
+    outputFiles:
+      - ca_produit.xlsx
+      - ca_produit.csv
+      - ca_produit_partiel.csv
+    script: |
+      import duckdb, pandas as pd
+
+      def est_partiel(filepath):
+        try:
+          return pd.read_csv(filepath).shape[0] > 0
+        except:
+          return False
+
+      IS_PARTIEL = est_partiel('fusion_partiel.csv')
+      if IS_PARTIEL:
+        print("Attention — Fusion partielle, CA sera partiel")
+
+      con = duckdb.connect()
+      con.execute("CREATE TABLE fusion AS SELECT * FROM read_csv('fusion.csv')")
+      con.execute("""
+        CREATE TABLE t_ca_produit AS
+        SELECT product_id, price, total_sales, post_title, post_name,
+               ROUND(price * total_sales, 2) AS ca_produit
+        FROM fusion
+      """)
+
+      df_ca = con.execute("SELECT * FROM t_ca_produit").df()
+      ca_total = round(df_ca["ca_produit"].sum(), 2)
+      df_ca["ca_total"] = ca_total
+
+      # TEST CA
+      errors = []
+      CA_ATTENDU = 70568.60
+
+      if abs(ca_total - CA_ATTENDU) > 1.0:
+        ecart = abs(ca_total - CA_ATTENDU)
+        msg = f"CA TOTAL : {ca_total:.2f}€ trouvé, {CA_ATTENDU}€ attendu (écart : {ecart:.2f}€)"
+        errors.append(msg)
+
+      nb_negatifs = (df_ca['ca_produit'] < 0).sum()
+      if nb_negatifs > 0:
+        msg = f"{nb_negatifs} produits avec CA < 0"
+        errors.append(msg)
+
+      if len(df_ca) != 714:
+        msg = f"{len(df_ca)} lignes trouvées, 714 attendues"
+        errors.append(msg)
+
+      if errors:
+        print("Erreurs lors des Tests CA :")
+        for e in errors:
+          print(f" - {e}")
+        IS_PARTIEL = True
+
+      df_ca.to_excel("ca_produit.xlsx", index=False)
+      df_ca.to_csv("ca_produit.csv", index=False, encoding='utf-8')
+
+      if IS_PARTIEL:
+        df_ca.to_csv("ca_produit_partiel.csv", index=False, encoding='utf-8')
+        print("Fichier ca_produit_partiel.csv généré")
+      else:
+        open('ca_produit_partiel.csv', 'w').write("product_id,price,total_sales,post_title,post_name\n")
+        print("Test CA OK")
+
+      print(f"CA calculé — total : {ca_total:.2f} € sur {len(df_ca)} produits")
+
+
+  # ===============================================================================
+  # CALCUL DU ZSCORE
+  # ===============================================================================
+  - id: calcul_zscore
+    type: io.kestra.plugin.scripts.python.Script
+    inputFiles:
+      ca_produit.csv: "{{ outputs.calcul_ca.outputFiles['ca_produit.csv'] }}"
+      ca_produit_partiel.csv: "{{ outputs.calcul_ca.outputFiles['ca_produit_partiel.csv'] }}"
+    outputFiles:
+      - vins_premium.csv
+      - vins_ordinaires.csv
+      - vins_premium_partiel.csv
+      - vins_ordinaires_partiel.csv
+    beforeCommands:
+      - pip install pandas numpy duckdb -q
+    script: |
+      import pandas as pd, numpy as np, duckdb
+
+      def est_partiel(filepath):
+        try:
+          return pd.read_csv(filepath).shape[0] > 0
+        except:
+          return False
+
+      IS_PARTIEL = est_partiel('ca_produit_partiel.csv')
+      if IS_PARTIEL:
+        print("Attention — CA source partiel, zscore sera partiel")
+
+      df = pd.read_csv('ca_produit.csv')
+
+      moyenne = df["price"].mean()
+      ecart_type = df["price"].std()
+      df["zscore"] = (df["price"] - moyenne) / ecart_type
+
+      vins_premium = df[df["zscore"] > 2].copy()
+      vins_ordinaires = df[df["zscore"] <= 2].copy()
+
+      print(f"Moyenne prix : {moyenne:.2f}€ | Ecart-type : {ecart_type:.2f}€")
+      print(f"Vins premium (zscore > 2) : {len(vins_premium)}")
+      print(f"Vins ordinaires (zscore <= 2) : {len(vins_ordinaires)}")
+
+      # TEST ZSCORE
+      errors = []
+      NB_PREMIUM_ATTENDU = 30
+
+      if len(vins_premium) != NB_PREMIUM_ATTENDU:
+        msg = f"{len(vins_premium)} vins premium détectés, {NB_PREMIUM_ATTENDU} attendus"
+        errors.append(msg)
+
+      total = len(vins_premium) + len(vins_ordinaires)
+      if total != 714:
+        msg = f"Total vins : {total} trouvés, 714 attendus"
+        errors.append(msg)
+
+      if df["zscore"].isna().sum() > 0:
+        nb_nan = df["zscore"].isna().sum()
+        msg = f"{nb_nan} valeurs manquantes dans zscore"
+        errors.append(msg)
+
+      nb_mauvais = (vins_premium['zscore'] <= 2).sum()
+      if nb_mauvais > 0:
+        msg = f"{nb_mauvais} vins premium avec zscore <= 2"
+        errors.append(msg)
+
+      if errors:
+        print("Erreurs lors des Tests ZSCORE :")
+        for e in errors:
+          print(f"  - {e}")
+        IS_PARTIEL = True
+
+      vins_premium.to_csv('vins_premium.csv', index=False, encoding='utf-8-sig')
+      vins_ordinaires.to_csv('vins_ordinaires.csv', index=False, encoding='utf-8-sig')
+
+      if IS_PARTIEL:
+        vins_premium.to_csv('vins_premium_partiel.csv', index=False, encoding='utf-8-sig')
+        vins_ordinaires.to_csv('vins_ordinaires_partiel.csv', index=False, encoding='utf-8-sig')
+        print("Fichiers vins_premium_partiel.csv et vins_ordinaires_partiel.csv générés")
+      else:
+        open('vins_premium_partiel.csv', 'w').write("product_id,price,total_sales,post_title,post_name,ca_produit,ca_total,zscore\n")
+        open('vins_ordinaires_partiel.csv', 'w').write("product_id,price,total_sales,post_title,post_name,ca_produit,ca_total,zscore\n")
+        print("TEST ZSCORE OK")
+
+      print(f"TEST ZSCORE — {len(vins_premium)} premium | {len(vins_ordinaires)} ordinaires | total {total}")
+

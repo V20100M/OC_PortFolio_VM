@@ -1,0 +1,11 @@
+faiss-cpu==1.13.2
+langchain==1.2.18
+langchain-community==0.4.1
+langchain-mistralai==1.1.4
+langchain-text-splitters==1.1.2
+mistralai==2.4.5
+pandas==3.0.2
+pytest==9.0.3
+python-dotenv==1.2.2
+requests==2.33.1
+tiktoken==0.12.0
