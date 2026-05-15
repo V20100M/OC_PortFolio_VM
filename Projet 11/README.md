@@ -63,7 +63,7 @@ OPEN_AGENDA_KEY=votre_clé_open_agenda
 ```
 pulsevents/
 │
-├── config.py                   # Configuration centralisée (clés API, chemins, paramètres)
+├── config.py                       # Configuration centralisée (clés API, chemins, paramètres)
 │
 ├── data/
 │   ├── events.csv                  # Événements nettoyés
@@ -73,26 +73,28 @@ pulsevents/
 │   ├── faiss_index.bin             # Index vectoriel FAISS
 │   ├── faiss_metadatas.json        # Métadonnées associées aux chunks
 │   ├── test_dataset.json           # Jeu de données test annoté
-│   └── evaluation_report.json      # Rapport d'évaluation généré
+│   ├── evaluation_report.json      # Rapport d'évaluation généré
+│   └── feedback.json               # Retours utilisateurs sur les réponses du chatbot
 │
 ├── scripts/
 │   ├── __init__.py
-│   ├── fetch_events.py         # Récupération et nettoyage des données Open Agenda
-│   └── vectorize.py            # Découpage en chunks, vectorisation et indexation FAISS
+│   ├── fetch_events.py             # Récupération et nettoyage des données Open Agenda
+│   └── vectorize.py                # Découpage en chunks, vectorisation et indexation FAISS
 │
 ├── tests/
-│   ├── test_fetch_events.py    # Tests unitaires sur les données récupérées
-│   └── test_vectorize.py       # Tests unitaires sur l'index FAISS
+│   ├── test_fetch_events.py        # Tests unitaires sur les données récupérées
+│   └── test_vectorize.py           # Tests unitaires sur l'index FAISS
 │
 ├── evaluation/
 │   ├── __init__.py
 │   ├── generate_test_dataset.py    # Génération du jeu de données test questions/réponses
 │   └── evaluate.py                 # Évaluation automatique des réponses du chatbot
 │
-├── chatbot.py                  # Interface chatbot RAG en ligne de commande
+├── app.py                          # Interface web Streamlit du chatbot
+├── chatbot.py                      # Interface chatbot RAG en ligne de commande
 │
-├── pyproject.toml              # Configuration pytest
-├── .env                        # Variables d'environnement (non versionné)
+├── pyproject.toml                  # Configuration pytest
+├── .env                            # Variables d'environnement (non versionné)
 ├── .gitignore
 └── requirements.txt
 ```
@@ -114,6 +116,9 @@ Charge les événements depuis `data/events.csv`, construit un texte par événe
 
 ### `chatbot.py`
 Interface en ligne de commande du chatbot RAG. Charge l'index FAISS, vectorise la question de l'utilisateur, récupère les chunks les plus pertinents, construit un contexte et génère une réponse avec `mistral-small-latest` via LangChain.
+
+### `app.py`
+Interface web du chatbot RAG basée sur Streamlit. Permet à l'utilisateur de poser des questions via un navigateur et de donner un retour (👍/👎) sur chaque réponse. Les retours sont sauvegardés dans `data/feedback.json`.
 
 ### `tests/test_fetch_events.py`
 Vérifie que les données récupérées respectent les contraintes du projet : présence des colonnes, absence de doublons, filtre géographique (Gironde), filtre temporel (entre la date du jour et un an plus tard), dates valides.
@@ -172,6 +177,13 @@ Processus de vectorisation et d'indexation terminé avec succès.
 
 ### Étape 3 — Lancer le chatbot
 
+**Option A — Interface web (recommandée) :**
+```bash
+streamlit run app.py
+```
+L'interface s'ouvre automatiquement dans le navigateur.
+
+**Option B — Ligne de commande :**
 ```bash
 python chatbot.py
 ```
@@ -291,3 +303,4 @@ Puis relancer les étapes 1 et 2 pour reconstruire la base de données.
 - Le fichier `.env` ne doit jamais être versionné.
 - La base vectorielle peut être reconstruite à tout moment en supprimant `data/embeddings.npy` et en relançant `python -m scripts.vectorize`. Les événements récupérés couvrent la période entre la date du jour et un an plus tard.
 - Si des événements sans ville sont détectés lors du nettoyage, ils sont sauvegardés dans data/events_sans_ville.csv pour analyse.
+- Les retours utilisateurs (👍/👎) sont sauvegardés dans data/feedback.json et peuvent être utilisés pour améliorer le système.

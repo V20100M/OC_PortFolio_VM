@@ -1,3 +1,4 @@
+import time
 import faiss
 import json
 import os
@@ -93,11 +94,19 @@ def build_rag_chatbot():
 
 # Réponse du chatbot
 def get_chatbot_response(index, metadatas, question, chain):
-    results = search_faiss(index, metadatas, question)
-    context = build_context(results)
-    response = chain.invoke({"context": context, "question": question})
-
-    return response
+    max_retries = 3
+    for attempt in range(max_retries):
+        try:
+            results = search_faiss(index, metadatas, question)
+            context = build_context(results)
+            response = chain.invoke({"context": context, "question": question})
+            return response
+        except Exception as e:
+            if "429" in str(e) and attempt < max_retries - 1:
+                print(f"Rate limit atteint, pause de 10s ... (tentative {attempt + 1}/{max_retries})")
+                time.sleep(10)
+            else:
+                raise e
 
 
 # Interface en ligne de commande
