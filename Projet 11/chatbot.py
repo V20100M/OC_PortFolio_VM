@@ -94,7 +94,7 @@ def build_rag_chatbot():
 
 # Réponse du chatbot
 def get_chatbot_response(index, metadatas, question, chain):
-    max_retries = 3
+    max_retries = 10
     for attempt in range(max_retries):
         try:
             results = search_faiss(index, metadatas, question)

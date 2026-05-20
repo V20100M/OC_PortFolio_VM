@@ -7,7 +7,11 @@ from config import GEO_FILTER_FIELD, GEO_FILTER_VALUE, EVENTS_CSV, DATE_MAX, DAT
 @pytest.fixture
 def df():
     """Charge le fichier events.csv généér par fetch_events.py"""
-    return pd.read_csv(EVENTS_CSV, encoding="utf-8-sig", parse_dates=["firstdate_begin", "lastdate_end"])
+    df = pd.read_csv(EVENTS_CSV, encoding="utf-8-sig", parse_dates=["firstdate_begin", "lastdate_end"])
+    # Convertir les dates en UTC pour cohérence avec les timestamps de config.py
+    df["firstdate_begin"] = pd.to_datetime(df["firstdate_begin"], utc=True)
+    df["lastdate_end"] = pd.to_datetime(df["lastdate_end"], utc=True)
+    return df
 
 # Tests
 def test_fichier_non_vide(df):

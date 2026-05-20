@@ -146,13 +146,13 @@ python -m scripts.fetch_events
 ```
 Filtre : location_department='Gironde' AND lastdate_end >= '2026-05-14T...' AND lastdate_end <= '2027-05-14T...'
 Récupération en cours...
-Total d'événements trouvés : 2036
-Récupération terminée. Total d'événements récupérés : 2036
+Total d'événements trouvés : 1999
+Récupération terminée. Total d'événements récupérés : 1998
 1 événement sans ville trouvé. Sauvegarde dans 'data/events_sans_ville.csv' pour analyse.
 --- Après nettoyage ---
-Lignes : 2035
+Lignes : 1998
 Fichiers sauvegardés : data/events.csv et data/events.json
-Jeu de données final : 2035 événements prêts à être indexés
+Jeu de données final : 1998 événements prêts à être indexés
 ```
 
 ### Étape 2 — Construire la base vectorielle
@@ -166,11 +166,11 @@ python -m scripts.vectorize
 
 **Résultat attendu :**
 ```
-Événements chargés : 2035
-Chunks créés : 6773
-Vectorisation terminée : 6773 vecteurs générés.
+Événements chargés : 1998
+Chunks créés : 6677
+Vectorisation terminée : 6677 vecteurs générés.
 Embeddings sauvegardés dans data/embeddings.npy
-Index Faiss créé avec 6773 vecteurs et dimension 1024.
+Index Faiss créé avec 6677 vecteurs et dimension 1024.
 Index et métadonnées sauvegardés : faiss_index.bin et faiss_metadatas.json
 Processus de vectorisation et d'indexation terminé avec succès.
 ```
@@ -191,8 +191,8 @@ python chatbot.py
 **Résultat attendu :**
 ```
 Chargement du chatbot...
-Index chargé avec 6773 vecteurs
-Métadonnées chargées : 6773 chunks
+Index chargé avec 6677 vecteurs
+Métadonnées chargées : 6677 chunks
 Chatbot Puls-Events prêt à répondre à vos questions sur les événements culturels en Gironde !
 Posez vos questions sur les événements en Gironde (ou tapez 'quitter' pour quitter) :
 Vous :
@@ -236,7 +236,7 @@ tests/test_vectorize.py::test_coherence_index_metadatas PASSED
 tests/test_vectorize.py::test_metadatas_champs_requis PASSED
 tests/test_vectorize.py::test_pertinence_recherche PASSED
 
-15 passed in 1.93s
+15 passed in X.XXs
 ```
 
 ### Lancer un fichier de tests spécifique

@@ -80,7 +80,7 @@ def clean_events(events):
     # Convertir les dates en format datetime
     for date_col in ["firstdate_begin", "lastdate_end"]:
         if date_col in df.columns:
-            df[date_col] = pd.to_datetime(df[date_col], errors="coerce")
+            df[date_col] = pd.to_datetime(df[date_col], errors="coerce", utc=True)
 
     # Filtrer les événements de plus d'un an
     date_now_dt = pd.Timestamp(DATE_NOW).tz_localize("UTC")

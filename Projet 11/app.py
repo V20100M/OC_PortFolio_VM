@@ -52,7 +52,12 @@ if "messages" not in st.session_state:
 
 # Chargement du chatbot
 with st.spinner("Chargement du chatbot..."):
-    index, metadatas, chain = init_chatbot()
+    try:
+        index, metadatas, chain = init_chatbot()
+    except Exception as e:
+        #st.error(f"Erreur lors du chargement du chatbot : {e}")
+        st.error("Impossible de charger le chatbot. Veuillez réessayer plus tard.")
+        st.stop()
 
 # Affichage de l'historique des conversations
 for message in st.session_state.messages:
@@ -70,7 +75,11 @@ if question := st.chat_input("Posez votre question sur les événements en Giron
     # Génération de la réponse du chatbot
     with st.chat_message("assistant"):
         with st.spinner("Recherche en cours..."):
-            response = get_chatbot_response(index, metadatas, question, chain)
+            try:
+                response = get_chatbot_response(index, metadatas, question, chain)
+            except Exception as e:
+                #st.error(f"Erreur lors de la génération de la réponse : {e}")
+                response = "Désolé, une erreur est survenue lors de la génération de la réponse."
         st.markdown(response)
         col1, col2, _ = st.columns([1, 1, 8])
         with col1:
