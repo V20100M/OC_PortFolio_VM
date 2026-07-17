@@ -1,0 +1,246 @@
+# docker-compose.yml
+# -------------------
+# Architecture du POC Avantages Sportifs
+#
+# Services :
+#   - postgres         : base de donnees principale (port 5432)
+#   - redpanda         : broker de messages Kafka-compatible (port 19092)
+#   - redpanda-console : interface web Redpanda (port 8082)
+#   - connect          : Kafka Connect + Debezium connector PostgreSQL (port 8083)
+#   - kestra           : orchestrateur de pipeline (port 8080)
+#   - pipeline         : scripts Python (run_pipeline.py)
+#
+# Usage :
+#   docker compose up -d
+#   docker compose logs -f pipeline
+#   docker compose down
+
+networks:
+  sport_net:
+    driver: bridge
+
+volumes:
+  postgres_data:
+  redpanda_data:
+  kestra_data:
+
+services:
+
+  # ---------------------------------------------------------------------------
+  # PostgreSQL — base de donnees principale
+  # wal_level=logical requis pour Debezium CDC
+  # ---------------------------------------------------------------------------
+  postgres:
+    image: postgres:17
+    container_name: sport_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER:     sport_user
+      POSTGRES_PASSWORD: ${DB_PASSWORD}
+    command: postgres -c wal_level=logical
+    ports:
+      - "5433:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./sql/databases.sql:/docker-entrypoint-initdb.d/00_databases.sql
+      - ./sql/roles.sql:/docker-entrypoint-initdb.d/01_roles.sql
+      - ./sql/create_tables.sql:/docker-entrypoint-initdb.d/02_create_tables.sql
+    networks:
+      - sport_net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U sport_user -d activitessportives"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+
+  # ---------------------------------------------------------------------------
+  # Redpanda — broker de messages Kafka-compatible
+  # ---------------------------------------------------------------------------
+  redpanda:
+    image: docker.redpanda.com/redpandadata/redpanda:v26.1.1
+    container_name: sport_redpanda
+    restart: unless-stopped
+    command:
+      - redpanda
+      - start
+      - --kafka-addr internal://0.0.0.0:9092,external://0.0.0.0:19092
+      - --advertise-kafka-addr internal://redpanda:9092,external://localhost:19092
+      - --schema-registry-addr internal://0.0.0.0:8081,external://0.0.0.0:18081
+      - --rpc-addr redpanda:33145
+      - --advertise-rpc-addr redpanda:33145
+      - --mode dev-container
+      - --smp 1
+      - --default-log-level=warn
+    ports:
+      - "19092:19092"
+      - "18081:18081"
+    volumes:
+      - redpanda_data:/var/lib/redpanda/data
+    networks:
+      - sport_net
+    healthcheck:
+      test: ["CMD-SHELL", "rpk cluster health | grep -E 'Healthy:.+true' || exit 1"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
+
+  # ---------------------------------------------------------------------------
+  # Redpanda Console — interface web
+  # Accessible sur http://localhost:8082
+  # ---------------------------------------------------------------------------
+  redpanda-console:
+    image: docker.redpanda.com/redpandadata/console:v2.8.13
+    container_name: sport_redpanda_console
+    restart: unless-stopped
+    entrypoint: /bin/sh
+    command: -c "echo \"$$CONSOLE_CONFIG_FILE\" > /tmp/config.yml && /app/console"
+    environment:
+      CONFIG_FILEPATH: /tmp/config.yml
+      CONSOLE_CONFIG_FILE: |
+        kafka:
+          brokers: ["redpanda:9092"]
+          schemaRegistry:
+            enabled: true
+            urls: ["http://redpanda:8081"]
+    ports:
+      - "8082:8080"
+    networks:
+      - sport_net
+    depends_on:
+      redpanda:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Kafka Connect + Debezium PostgreSQL connector
+  # Accessible sur http://localhost:8083
+  # ---------------------------------------------------------------------------
+  connect:
+    image: quay.io/debezium/connect:2.7
+    container_name: sport_debezium
+    restart: unless-stopped
+    environment:
+      BOOTSTRAP_SERVERS:    redpanda:9092
+      GROUP_ID:             debezium-group
+      CONFIG_STORAGE_TOPIC: debezium_configs
+      OFFSET_STORAGE_TOPIC: debezium_offsets
+      STATUS_STORAGE_TOPIC: debezium_status
+      KEY_CONVERTER:        org.apache.kafka.connect.json.JsonConverter
+      VALUE_CONVERTER:      org.apache.kafka.connect.json.JsonConverter
+    ports:
+      - "8083:8083"
+    networks:
+      - sport_net
+    depends_on:
+      redpanda:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8083/connectors"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+
+  # ---------------------------------------------------------------------------
+  # Debezium Setup — enregistre le connecteur PostgreSQL automatiquement
+  # Service ephemere : s'execute une fois puis s'arrete (Exited (0) normal)
+  # ---------------------------------------------------------------------------
+  debezium-setup:
+    image: curlimages/curl:latest
+    container_name: sport_debezium_setup
+    restart: "no"
+    networks:
+      - sport_net
+    volumes:
+      - ./connector-config.json:/connector-config.json:ro
+    depends_on:
+      connect:
+        condition: service_healthy
+    command:
+      - -X
+      - PUT
+      - http://connect:8083/connectors/postgres-connector/config
+      - -H
+      - "Content-Type: application/json"
+      - -d
+      - "@/connector-config.json"
+
+
+  # ---------------------------------------------------------------------------
+  # Kestra — orchestrateur de pipeline
+  # Accessible sur http://localhost:8080
+  # ---------------------------------------------------------------------------
+  kestra:
+    image: kestra/kestra:latest
+    container_name: sport_kestra
+    restart: unless-stopped
+    pull_policy: always
+    user: "root"
+    command: server standalone
+    environment:
+      SECRET_DB_PASSWORD: ${SECRET_DB_PASSWORD}
+      SECRET_SLACK_WEBHOOK_URL: ${SECRET_SLACK_WEBHOOK_URL}
+      KESTRA_CONFIGURATION: |
+        datasources:
+          postgres:
+            url: jdbc:postgresql://postgres:5432/kestra
+            driverClassName: org.postgresql.Driver
+            username: sport_user
+            password: ${DB_PASSWORD}
+        kestra:
+          repository:
+            type: postgres
+          storage:
+            type: local
+            local:
+              base-path: "/app/storage"
+          queue:
+            type: postgres
+          tasks:
+            tmp-dir:
+              path: /tmp/kestra-wd/tmp
+    volumes:
+      - kestra_data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+      - /tmp/kestra-wd:/tmp/kestra-wd
+    ports:
+      - "8080:8080"
+    networks:
+      - sport_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  # ---------------------------------------------------------------------------
+  # Pipeline — scripts Python
+  # Lance run_pipeline.py apres que postgres soit pret
+  # restart: "no" = s'execute une seule fois
+  # ---------------------------------------------------------------------------
+  pipeline:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: sport_pipeline
+    restart: "no"
+    environment:
+      DB_HOST:     postgres
+      DB_PORT:     5432
+      DB_NAME:     activitessportives
+      DB_USER:     sport_user
+      DB_PASSWORD: ${DB_PASSWORD}
+      DATA_DIR:    /app/data
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      SLACK_WEBHOOK_URL: ${SLACK_WEBHOOK_URL}
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    networks:
+      - sport_net
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redpanda:
+        condition: service_healthy

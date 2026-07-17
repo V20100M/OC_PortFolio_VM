@@ -15,7 +15,8 @@ desktop.ini
 venv/
 .venv/
 .env
+.env.docker
 output/
 checkpoint/
 
-
+connector-config.json

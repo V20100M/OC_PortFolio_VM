@@ -1,0 +1,25 @@
+id: notify_slack_strava
+namespace: sport
+
+tasks:
+  - id: run_consumer
+    type: io.kestra.plugin.docker.Run
+    containerImage: activites_sportives-pipeline:latest
+    networkMode: activites_sportives_sport_net
+    commands:
+      - sh
+      - -c
+      - "cd /app && python -m scripts.consumer_slack"
+    env:
+      DB_HOST: postgres
+      DB_PORT: "5432"
+      DB_NAME: activitessportives
+      DB_USER: sport_user
+      DB_PASSWORD: "{{ secret('DB_PASSWORD') }}"
+      KAFKA_BOOTSTRAP_SERVERS: redpanda:9092
+      SLACK_WEBHOOK_URL: "{{ secret('SLACK_WEBHOOK_URL') }}"
+
+triggers:
+  - id: schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "*/1 * * * *"
