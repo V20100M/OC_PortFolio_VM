@@ -1,0 +1,20 @@
+# On ignore les fichiers Python compilés
+__pycache__/**
+*.pyc
+*.pyo
+*.pyd
+
+# On ignore les fichiers d'environnement
+.env
+.env.*
+
+# On ignore les dossiers et fichiers de l'environnement virtuel
+.venv
+venv/**
+
+# On ignore les fichiers de configuration de git
+.git
+.gitignore
+
+# On ignore les checkpoints de Jupyter notebook
+.ipynb_checkpoints

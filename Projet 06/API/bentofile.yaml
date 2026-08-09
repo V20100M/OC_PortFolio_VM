@@ -1,0 +1,21 @@
+service: "service:SeattleEnergyService"
+
+labels:
+  owner: "VM"
+  project: "seattle-energy-prediction"
+
+include:
+  - service.py
+  - schemas.py
+  - preprocessing.py
+
+models:
+  - "seattle_energy_model:latest"
+
+python:
+  packages:
+    - bentoml==1.4.30
+    - pandas>=2.2.3
+    - numpy==2.3.4
+    - scikit-learn==1.8.0
+    - pydantic==2.12.5

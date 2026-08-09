@@ -1,0 +1,328 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Prédiction d'Energie de Seattle</title>
+
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  />
+</head>
+
+<body class="bg-light">
+  <div class="container py-4" style="max-width: 900px;">
+    <div class="mb-4">
+      <h1 class="h3 mb-1">Prédiction de l'énergie de bâtiments à Seattle</h1>
+      <div class="text-secondary">Saisie des caractéristiques bâtiment → prédiction kBTU</div>
+    </div>
+
+    <div class="card shadow-sm">
+      <div class="card-body">
+        <form action="/predict/" method="post" class="row g-3">
+
+          {% if error %}
+            <div class="col-12">
+              <div class="alert alert-danger mb-0" role="alert">
+                {{ error }}
+              </div>
+            </div>
+          {% endif %}
+
+          <div class="col-12">
+            <div class="col-12">
+              <h2 class="h5 mb-0">Prédictions</h2>
+              <hr class="mt-2" />
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Prédiction d'utilisation d'énergie - Predicted Site Energy Use (kBTU)</label>
+              <input
+                class="form-control"
+                type="text"
+                value="{{ prediction.site_energy_use_kbtu if prediction is not none else '' }}"
+                readonly
+              />
+            </div>
+
+            <div class="col-md-6">
+              <label class="form-label">Prédiction d'émissions de CO2 - Predicted Total GHG Emissions</label>
+              <input
+                class="form-control"
+                type="text"
+                value="{{ prediction.total_ghg_emissions if prediction is not none else '' }}"
+                readonly
+              />
+            </div>
+
+            <div class="col-12">
+              <div class="form-text">
+                Résultats issus du modèle RandomForest entraîné sur les bâtiments non résidentiels de Seattle.
+              </div>
+            </div>
+
+            <h2 class="h5 mb-0">Bâtiment</h2>
+            <hr class="mt-2" />
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Surface Totale (PropertyGFATotal)</label>
+            <input 
+              class="form-control" 
+              type="number" 
+              name="property_gfa_total" 
+              step="any" 
+              min="0.0000001" 
+              value="{{ form.get('property_gfa_total','') }}" 
+              required 
+            />
+            <div class="form-text">Doit être &gt; 0</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Surface de parking (PropertyGFAParking)</label>
+            <input 
+              class="form-control" 
+              type="number" 
+              name="property_gfa_parking" 
+              step="any" 
+              min="0" 
+              value="{{ form.get('property_gfa_parking','') }}"
+              required 
+            />
+            <div class="form-text">Doit être ≥ 0</div>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Année de construction (Year Built)</label>
+            <input 
+              class="form-control" 
+              type="number" 
+              name="year_built" 
+              min="1800"
+              value="{{ form.get('year_built','') }}" 
+              required 
+            />
+            <div class="form-text">Doit être ≥ 1800</div>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Nombre d'étages (Number of Floors)</label>
+            <input 
+              class="form-control" 
+              type="number" 
+              name="number_of_floors" 
+              min="1" 
+              value="{{ form.get('number_of_floors','') }}" 
+              required 
+            />
+            <div class="form-text">Doit être ≥ 0</div>
+          </div>
+
+          <div class="col-md-4">
+            <label class="form-label">Nombre de bâtiments (Number of Buildings)</label>
+            <input 
+              class="form-control" 
+              type="number" 
+              name="number_of_buildings" 
+              min="1" 
+              value="{{ form.get('number_of_buildings','') }}" 
+              required 
+            />
+            <div class="form-text">Doit être ≥ 1</div>
+          </div>
+
+          <div class="col-12 mt-2">
+            <h2 class="h5 mb-0">Usage</h2>
+            <hr class="mt-2" />
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Type de propriété principale (Primary Property Type)</label>
+            <input
+              class="form-control"
+              list="primary_property_type_list"
+              name="primary_property_type"
+              placeholder="Select or type a primary property type"
+              value="{{ form.get('primary_property_type','') }}"
+              required
+            />
+
+            <datalist id="primary_property_type_list">
+              <option value="Distribution Center">
+              <option value="Hospital">
+              <option value="K-12 School">
+              <option value="Laboratory">
+              <option value="Large Office">
+              <option value="Medical Office">
+              <option value="Office">
+              <option value="Other">
+              <option value="Refrigerated Warehouse">
+              <option value="Restaurant">
+              <option value="Retail Store">
+              <option value="Self-Storage Facility">
+              <option value="Small- and Mid-Sized Office">
+              <option value="Supermarket / Grocery Store">
+              <option value="University">
+              <option value="Warehouse">
+              <option value="Worship Facility">
+            </datalist>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Type d'utilisation principale (Largest Property Use Type)</label>
+            <input
+              class="form-control"
+              list="largest_use_list"
+              name="largest_property_use_type"
+              placeholder="Select or type a property use"
+              value="{{ form.get('largest_property_use_type','') }}"
+              required
+            />
+
+            <datalist id="largest_use_list">
+              <option value="Adult Education">
+              <option value="Automobile Dealership">
+              <option value="Bank Branch">
+              <option value="College/University">
+              <option value="Convention Center">
+              <option value="Courthouse">
+              <option value="Data Center">
+              <option value="Distribution Center">
+              <option value="Financial Office">
+              <option value="Fire Station">
+              <option value="Fitness Center/Health Club/Gym">
+              <option value="Food Service">
+              <option value="Hospital (General Medical & Surgical)">
+              <option value="Hotel">
+              <option value="K-12 School">
+              <option value="Laboratory">
+              <option value="Librairy">
+              <option value="Lifestyle Center">
+              <option value="Manufacturing/Industrial Plant">
+              <option value="Medical Office">
+              <option value="Movie Theater">
+              <option value="Museum">
+              <option value="Non-Refrigerated Warehouse">
+              <option value="Office">
+              <option value="Other">
+              <option value="Other - Education">
+              <option value="Other - Entertainment/Public Assembly">
+              <option value="Other - Lodging/Residential">
+              <option value="Other - Mall">
+              <option value="Other - Public Services">
+              <option value="Other - Recreation">
+              <option value="Other - Restaurant/Bar">
+              <option value="Other - Services">
+              <option value="Other - Utility">
+              <option value="Other/Speciality Hospital">
+              <option value="Parking">
+              <option value="Performing Arts">
+              <option value="Personal Services (Health/Beauty, Dry, Cleaning, etc.)">
+              <option value="Police Station">
+              <option value="Pre-school/Daycare">
+              <option value="Prison/Incarceration">
+              <option value="Refrigerated Warehouse">
+              <option value="Repair Services (Vehicle, Shoe, Locksmith, etc.)">
+              <option value="Residential Care Facility">
+              <option value="Restaurant">
+              <option value="Retail Store">
+              <option value="Self-Storage Facility">
+              <option value="Social/Meeting Hall">
+              <option value="Strip Mall">
+              <option value="Supermarket/Grocery Store">
+              <option value="Urgent Care/Clinic/Other Outpatient">
+              <option value="Wholesale Club/Supercenter">
+              <option value="Worship Facility">
+            </datalist>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Quartier (Neighborhood)</label>
+            <input 
+              class="form-control" 
+              list="neighborhood_list" 
+              name="neighborhood" 
+              placeholder="Select or type a neighborhood" 
+              value="{{ form.get('neighborhood','') }}" 
+              required 
+            />
+            <datalist id="neighborhood_list">
+              <option value="BALLARD">
+              <option value="CENTRAL">
+              <option value="DELRIDGE">
+              <option value="DELRIDGE NEIGHBORHOODS">
+              <option value="DOWNTOWN">
+              <option value="EAST">
+              <option value="GREATER DUWAMISH">
+              <option value="LAKE UNION">
+              <option value="MAGNOLIA / QUEEN ANNE">
+              <option value="NORTH">
+              <option value="NORTHEAST">
+              <option value="NORTHWEST">
+              <option value="SOUTHEAST">
+              <option value="SOUTHWEST">
+            </datalist>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Surface d'utilisation principale (Largest Property Use GFA)</label>
+            <input 
+              class="form-control" 
+              type="number" 
+              name="largest_property_use_gfa" 
+              step="any" 
+              min="0.0000001" 
+              value="{{ form.get('largest_property_use_gfa','') }}" 
+              required 
+            />
+            <div class="form-text">Doit être &gt; 0 (et ≤ Total GFA sinon erreur Pydantic)</div>
+          </div>
+
+          <div class="col-12 mt-2">
+            <h2 class="h5 mb-0">Localisation</h2>
+            <hr class="mt-2" />
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Latitude</label>
+            <input 
+              class="form-control" 
+              type="number" 
+              name="latitude" 
+              step="any" 
+              min="47.0" 
+              max="48.0" 
+              value="{{ form.get('latitude','') }}"
+              required 
+            />
+            <div class="form-text">Entre 47.0 et 48.0</div>
+          </div>
+
+          <div class="col-md-6">
+            <label class="form-label">Longitude</label>
+            <input 
+              class="form-control" 
+              type="number" 
+              name="longitude" 
+              step="any" 
+              min="-123.0" 
+              max="-121.0" 
+              value="{{ form.get('longitude','') }}"
+              required 
+            />
+            <div class="form-text">Entre -123.0 et -121.0</div>
+          </div>
+
+          <div class="col-12 d-flex gap-2 justify-content-end mt-3">
+            <button type="reset" class="btn btn-outline-secondary">Reset</button>
+            <button type="submit" class="btn btn-primary">Predict</button>
+          </div>
+
+        </form>
+      </div>
+    </div>
+  </div>
+</body>
+</html>
