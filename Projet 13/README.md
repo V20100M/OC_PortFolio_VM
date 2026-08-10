@@ -78,8 +78,8 @@ Observabilité : Grafana Alloy (alloy/) — envoie métriques et logs Postgres
 ### 1. Cloner le dépôt
 
 ```bash
-git clone <url-du-repo>
-cd pulsevents
+git clone https://github.com/V20100M/OC_PortFolio_VM.git
+cd "Projet 13"
 ```
 
 ### 2. Configurer les variables d'environnement
