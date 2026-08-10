@@ -1,0 +1,171 @@
+#pe-widget-button {
+    position: fixed;
+    bottom: 24px;
+    right: 24px;
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background-color: #e8845c;
+    color: #0d1b2a;
+    border: none;
+    font-size: 28px;
+    cursor: pointer;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.3);
+    z-index: 9998;
+}
+
+#pe-widget-button:hover {
+    background-color: #c86840;
+}
+
+#pe-widget-panel {
+    position: fixed;
+    bottom: 96px;
+    right: 24px;
+    display: flex;
+    flex-direction: column;
+    background-color: #0d1b2a;
+    color: #f5f0e8;
+    border-radius: 12px;
+    box-shadow: 0 8px 24px rgba(0,0,0,0.4);
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    z-index: 9999;
+    overflow: hidden;
+}
+
+#pe-widget-panel.pe-size-small { width: 320px; height: 440px; }
+#pe-widget-panel.pe-size-medium { width: 400px; height: 580px; }
+#pe-widget-panel.pe-size-large { width: 520px; height: 720px; }
+
+#pe-widget-panel.pe-pos-left { right: auto; left: 24px; }
+
+#pe-widget-panel.pe-hidden { display: none; }
+
+.pe-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 10px 14px;
+    background-color: #1b2a3a;
+    border-bottom: 1px solid rgba(245,240,232,0.15);
+}
+
+.pe-header-title {
+    font-weight: 600;
+    color: #e8845c;
+}
+
+.pe-header-controls {
+    display: flex;
+    gap: 6px;
+}
+
+.pe-header-controls button {
+    background: none;
+    border: 1px solid rgba(245,240,232,0.3);
+    color: #f5f0e8;
+    border-radius: 4px;
+    padding: 2px 8px;
+    cursor: pointer;
+    font-size: 12px;
+}
+
+.pe-header-controls button:hover {
+    background-color: rgba(245,240,232,0.1);
+}
+
+#pe-body {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+    min-height: 0;
+}
+
+.pe-messages {
+    flex: 1;
+    min-height: 0;
+    overflow-y: auto;
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+}
+
+.pe-message {
+    padding: 8px 12px;
+    border-radius: 10px;
+    max-width: 85%;
+    line-height: 1.4;
+    font-size: 14px;
+    white-space: pre-wrap;
+}
+
+.pe-message strong {
+    font-weight: 700;
+}
+
+.pe-message ul, .pe-message ol {
+    margin: 4px 0 4px 18px;
+    padding: 0;
+}
+
+.pe-message.pe-user {
+    align-self: flex-end;
+    background-color: #e8845c;
+    color: #0d1b2a;
+}
+
+.pe-message.pe-assistant {
+    align-self: flex-start;
+    background-color: #1b2a3a;
+}
+
+.pe-input-row {
+    display: flex;
+    gap: 6px;
+    padding: 10px;
+    border-top: 1px solid rgba(245,240,232,0.15);
+}
+
+.pe-input-row input {
+    flex: 1;
+    padding: 8px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(245,240,232,0.25);
+    background-color: #1b2a3a;
+    color: #f5f0e8;
+}
+
+.pe-input-row button {
+    padding: 8px 14px;
+    border-radius: 6px;
+    border: none;
+    background-color: #e8845c;
+    color: #0d1b2a;
+    font-weight: 600;
+    cursor: pointer;
+}
+
+.pe-geoloc-box {
+    padding: 12px;
+    font-size: 14px;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+}
+
+.pe-geoloc-box button, .pe-geoloc-box select, .pe-geoloc-box input {
+    padding: 6px 10px;
+    border-radius: 6px;
+    border: 1px solid rgba(245,240,232,0.25);
+    background-color: #1b2a3a;
+    color: #f5f0e8;
+}
+
+.pe-geoloc-box button {
+    background-color: #e8845c;
+    color: #0d1b2a;
+    font-weight: 600;
+    border: none;
+    cursor: pointer;
+}

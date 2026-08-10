@@ -1,0 +1,148 @@
+services:
+  postgres:
+    image: postgres:18
+    restart: unless-stopped
+    command: >
+      postgres
+      -c shared_preload_libraries=pg_stat_statements
+      -c compute_query_id=on
+      -c pg_stat_statements.track=all
+      -c track_activity_query_size=4096
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: ${POSTGRES_DB}
+    volumes:
+      - pgdata:/var/lib/postgresql
+      - ./sql/init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d ${POSTGRES_DB}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  backend:
+    build: .
+    restart: unless-stopped
+    command: uvicorn backend.main:app --host 0.0.0.0 --port 8000
+    env_file: .env
+    environment:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      QDRANT_HOST: qdrant
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "8000:8000"
+
+  streamlit:
+    build: .
+    restart: unless-stopped
+    command: streamlit run app.py --server.address 0.0.0.0 --server.port 8501
+    env_file: .env
+    environment:
+      API_BASE_URL: http://backend:8000
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+    depends_on:
+      - backend
+    volumes:
+      - ./data:/app/data
+      - ./logs:/app/logs
+    ports:
+      - "8501:8501"
+
+  web:
+    build: ./web
+    restart: unless-stopped
+    ports:
+      - "8080:80"
+
+  qdrant:
+    image: qdrant/qdrant:latest
+    restart: unless-stopped
+    ports:
+      - "6333:6333"
+    volumes:
+      - qdrant_data:/qdrant/storage
+
+  kestra:
+    image: kestra/kestra:latest
+    restart: unless-stopped
+    user: "root"
+    command: server standalone
+    environment:
+      SECRET_MISTRAL_API_KEY: ${SECRET_MISTRAL_API_KEY}
+      SECRET_OPEN_AGENDA_KEY: ${SECRET_OPEN_AGENDA_KEY}
+      SECRET_POSTGRES_PASSWORD: ${SECRET_POSTGRES_PASSWORD}
+      KESTRA_CONFIGURATION: |
+        datasources:
+          postgres:
+            url: jdbc:postgresql://postgres:5432/kestra
+            driverClassName: org.postgresql.Driver
+            username: ${POSTGRES_USER}
+            password: ${POSTGRES_PASSWORD}
+        kestra:
+          repository:
+            type: postgres
+          storage:
+            type: local
+            local:
+              basePath: "/app/storage"
+          queue:
+            type: postgres
+          plugins:
+            configurations:
+              - type: io.kestra.plugin.scripts.runner.docker.Docker
+                values:
+                  volume-enabled: true
+    volumes:
+      - kestra_data:/app/storage
+      - /var/run/docker.sock:/var/run/docker.sock
+    ports:
+      - "8081:8080"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  pdc-agent:
+    image: grafana/pdc-agent:latest
+    restart: unless-stopped
+    command: >
+      -token ${PDC_TOKEN}
+      -cluster prod-eu-west-2
+      -gcloud-hosted-grafana-id <votre_id_grafana>
+    depends_on:
+      - postgres
+
+  alloy:
+    image: grafana/alloy:latest
+    restart: unless-stopped
+    command: run --server.http.listen-addr=0.0.0.0:12345 /etc/alloy/config.alloy
+    volumes:
+      - ./alloy/config.alloy:/etc/alloy/config.alloy:ro
+    environment:
+      DB_O11Y_DSN: ${DB_O11Y_DSN}
+      GCLOUD_HOSTED_METRICS_URL: ${GCLOUD_HOSTED_METRICS_URL}
+      GCLOUD_HOSTED_METRICS_ID: ${GCLOUD_HOSTED_METRICS_ID}
+      GCLOUD_RW_API_KEY: ${GCLOUD_RW_API_KEY}
+      GCLOUD_HOSTED_LOGS_URL: ${GCLOUD_HOSTED_LOGS_URL}
+      GCLOUD_HOSTED_LOGS_ID: ${GCLOUD_HOSTED_LOGS_ID}
+    ports:
+      - "12345:12345"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  pgdata:
+  qdrant_data:
+  kestra_data:

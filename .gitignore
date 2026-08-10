@@ -20,3 +20,5 @@ output/
 checkpoint/
 
 connector-config.json
+
+Projet 13/data/pipeline/*.json

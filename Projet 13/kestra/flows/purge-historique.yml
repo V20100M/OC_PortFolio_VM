@@ -1,0 +1,26 @@
+id: purge-historique
+namespace: pulsevents
+description: Purge quotidienne de l'historique conversationnel de plus de 2 mois (RGPD)
+
+triggers:
+  - id: daily_schedule
+    type: io.kestra.plugin.core.trigger.Schedule
+    cron: "0 3 * * *"
+
+tasks:
+  - id: purge_historique
+    type: io.kestra.plugin.docker.Run
+    containerImage: pulsevents-backend:latest
+    networkMode: pulsevents_default
+    volumes:
+      - pulsevent_kestra_pipeline_data:/app/data
+    commands:
+      - sh
+      - -c
+      - "cd /app && python -m pipeline.purge_historique"
+    env:
+      POSTGRES_HOST: postgres
+      POSTGRES_PORT: "5432"
+      POSTGRES_DB: pulsevent
+      POSTGRES_USER: pulsevent_user
+      POSTGRES_PASSWORD: "{{ secret('POSTGRES_PASSWORD') }}"

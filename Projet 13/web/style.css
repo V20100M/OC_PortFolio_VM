@@ -1,0 +1,130 @@
+:root {
+    --bg-principal: #0d1b2a;
+    --texte-clair: #f5f0e8;
+    --accent: #e8845c;
+    --accent-fonce: #c86840;
+    --champ-bg: #1b2a3a;
+}
+
+* {
+    box-sizing: border-box;
+    margin: 0;
+    padding: 0;
+}
+
+body {
+    font-family: system-ui, -apple-system, "Segoe UI", sans-serif;
+    background-color: var(--bg-principal);
+    color: var(--texte-clair);
+    min-height: 100vh;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 16px 32px;
+    border-bottom: 1px solid rgba(245, 240, 232, 0.15);
+}
+
+.logo {
+    height: 48px;
+}
+
+.zone-connexion, .zone-utilisateur {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+}
+
+.zone-connexion[hidden], .zone-utilisateur[hidden] {
+    display: none !important;
+}
+
+.form-login {
+    display: flex;
+    gap: 8px;
+}
+
+.form-login input {
+    padding: 8px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(245, 240, 232, 0.25);
+    background-color: var(--champ-bg);
+    color: var(--texte-clair);
+}
+
+button {
+    padding: 8px 16px;
+    border-radius: 6px;
+    border: none;
+    background-color: var(--accent);
+    color: var(--bg-principal);
+    font-weight: 600;
+    cursor: pointer;
+}
+
+button:hover {
+    background-color: var(--accent-fonce);
+}
+
+.btn-lien {
+    background: none;
+    color: var(--accent);
+    font-weight: 400;
+    text-decoration: underline;
+    padding: 8px 4px;
+}
+
+.btn-lien:hover {
+    background: none;
+    color: var(--accent-fonce);
+}
+
+.contenu-principal {
+    max-width: 640px;
+    margin: 64px auto;
+    padding: 0 24px;
+}
+
+.section-inactive {
+    display: none;
+}
+
+.section-active {
+    display: block;
+}
+
+h1 {
+    color: var(--accent);
+    margin-bottom: 16px;
+}
+
+p {
+    line-height: 1.6;
+    margin-bottom: 12px;
+}
+
+.form-inscription {
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    margin-top: 24px;
+}
+
+.form-inscription input {
+    padding: 10px 12px;
+    border-radius: 6px;
+    border: 1px solid rgba(245, 240, 232, 0.25);
+    background-color: var(--champ-bg);
+    color: var(--texte-clair);
+}
+
+.message-erreur {
+    margin-top: 16px;
+    color: var(--accent);
+}
+
+#texte-bienvenue {
+    font-weight: 600;
+}

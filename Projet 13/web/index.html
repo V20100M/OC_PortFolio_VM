@@ -1,0 +1,69 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Puls-Events</title>
+    <link rel="stylesheet" href="style.css">
+</head>
+<body>
+
+    <header class="header">
+        <div class="header-brand">
+            <img src="assets/logo.png" alt="Logo Puls-Events" class="logo">
+        </div>
+        <div id="zone-connexion" class="zone-connexion">
+            <form id="form-login" class="form-login">
+                <input type="text" id="login-login" placeholder="Identifiant" required>
+                <input type="password" id="login-mdp" placeholder="Mot de passe" required>
+                <button type="submit">Se connecter</button>
+            </form>
+            <button id="btn-afficher-inscription" class="btn-lien">Créer un compte</button>
+        </div>
+        <div id="zone-utilisateur" class="zone-utilisateur" hidden>
+            <span id="texte-bienvenue"></span>
+            <button id="btn-deconnexion" class="btn-lien">Se déconnecter</button>
+        </div>
+    </header>
+
+    <main class="contenu-principal">
+
+        <section id="section-a-propos" class="section-active">
+            <h1>Puls-Events</h1>
+            <p>
+                Puls-Events est votre plateforme pour découvrir et suivre les événements culturels
+                près de chez vous. Concerts, expositions, festivals, spectacles : notre assistant
+                intelligent vous aide à trouver les événements qui correspondent à vos envies,
+                où que vous soyez.
+            </p>
+            <p>
+                Créez un compte pour personnaliser vos recommandations et retrouver l'historique
+                de vos échanges avec notre chatbot.
+            </p>
+        </section>
+
+        <section id="section-inscription" class="section-inactive">
+            <h1>Créer un compte</h1>
+            <form id="form-inscription" class="form-inscription">
+                <input type="text" id="inscription-nom" placeholder="Nom" required>
+                <input type="text" id="inscription-prenom" placeholder="Prénom" required>
+                <input type="number" id="inscription-age" placeholder="Âge" min="0" max="120" required>
+                <input type="text" id="inscription-code-postal" placeholder="Code postal" required>
+                <input type="text" id="inscription-ville" placeholder="Ville" required>
+                <input type="email" id="inscription-mail" placeholder="Adresse mail" required>
+                <input type="text" id="inscription-login" placeholder="Identifiant" required>
+                <input type="password" id="inscription-mdp" placeholder="Mot de passe (8 caractères min.)" required minlength="8">
+                <button type="submit">Créer mon compte</button>
+            </form>
+            <button id="btn-retour-a-propos" class="btn-lien">Retour</button>
+        </section>
+
+        <p id="message-erreur" class="message-erreur" hidden></p>
+
+    </main>
+
+    <script src="script.js"></script>
+    <link rel="stylesheet" href="widget.css">
+    <script src="widget.js"></script>
+</body>
+</html>

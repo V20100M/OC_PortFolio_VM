@@ -1,0 +1,72 @@
+prometheus.exporter.postgres "pulsevent_postgres_postgres_prometheus_exporter" {
+  data_source_names  = [sys.env("DB_O11Y_DSN")]
+  enabled_collectors = ["stat_statements"]
+
+  stat_statements {
+    exclude_users = ["db-o11y"]
+  }
+
+  autodiscovery {
+    enabled = true
+  }
+}
+
+database_observability.postgres "pulsevent_postgres_postgres_db_observability" {
+  data_source_name  = sys.env("DB_O11Y_DSN")
+  forward_to        = [loki.relabel.pulsevent_postgres_postgres_loki_relabel.receiver]
+  targets           = prometheus.exporter.postgres.pulsevent_postgres_postgres_prometheus_exporter.targets
+  enable_collectors = ["query_details", "query_samples", "schema_details", "explain_plans"]
+
+}
+
+loki.relabel "pulsevent_postgres_postgres_loki_relabel" {
+  forward_to = [loki.write.pulsevent_postgres_postgres_loki_write.receiver]
+  rule {
+    target_label = "instance"
+    replacement  = "pulsevent-postgres"
+  }
+}
+
+discovery.relabel "pulsevent_postgres_postgres_discovery_relabel" {
+  targets = database_observability.postgres.pulsevent_postgres_postgres_db_observability.targets
+
+  rule {
+    target_label = "job"
+    replacement  = "integrations/db-o11y"
+  }
+  rule {
+    source_labels = ["instance"]
+    target_label  = "dsn"
+  }
+  rule {
+    target_label = "instance"
+    replacement  = "pulsevent-postgres"
+  }
+}
+
+prometheus.scrape "pulsevent_postgres_postgres_prometheus_scrape" {
+  targets    = discovery.relabel.pulsevent_postgres_postgres_discovery_relabel.output
+  forward_to = [prometheus.remote_write.pulsevent_postgres_postgres_prometheus_remote_write.receiver]
+}
+
+prometheus.remote_write "pulsevent_postgres_postgres_prometheus_remote_write" {
+  endpoint {
+    url = sys.env("GCLOUD_HOSTED_METRICS_URL")
+
+    basic_auth {
+      password = sys.env("GCLOUD_RW_API_KEY")
+      username = sys.env("GCLOUD_HOSTED_METRICS_ID")
+    }
+  }
+}
+
+loki.write "pulsevent_postgres_postgres_loki_write" {
+  endpoint {
+    url = sys.env("GCLOUD_HOSTED_LOGS_URL")
+
+    basic_auth {
+      password = sys.env("GCLOUD_RW_API_KEY")
+      username = sys.env("GCLOUD_HOSTED_LOGS_ID")
+    }
+  }
+}
